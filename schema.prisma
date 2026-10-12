@@ -1,0 +1,367 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  GENERAL_MANAGER
+  STATION_MANAGER
+  FINANCE
+  HR
+  NEWS_EDITOR
+  PROGRAMME_MANAGER
+  TECHNICAL_MANAGER
+  DEPARTMENT_HEAD
+  MARKETING
+  STAFF
+}
+
+enum RecordStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum RequestStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  RETURNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum AssetStatus {
+  AVAILABLE
+  RESERVED
+  CHECKED_OUT
+  MAINTENANCE
+  DAMAGED
+  RETIRED
+}
+
+enum ScheduleStatus {
+  PLANNED
+  READY
+  AIRED
+  MISSED
+  RESCHEDULED
+  CANCELLED
+}
+
+enum FinanceType {
+  INCOME
+  EXPENSE
+}
+
+enum JobStatus {
+  LEAD
+  QUOTED
+  APPROVED
+  IN_PROGRESS
+  COMPLETED
+  INVOICED
+  PAID
+  CANCELLED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String?
+  role         Role     @default(STAFF)
+  active       Boolean  @default(true)
+  employee     Employee?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Department {
+  id          String     @id @default(cuid())
+  name        String     @unique
+  description String?
+  employees   Employee[]
+  reports     DepartmentReport[]
+  createdAt   DateTime   @default(now())
+}
+
+model Employee {
+  id              String       @id @default(cuid())
+  staffNumber     String       @unique
+  firstName       String
+  lastName        String
+  email           String       @unique
+  phone           String?
+  jobTitle        String
+  employmentDate  DateTime?
+  status          RecordStatus @default(ACTIVE)
+  photoUrl        String?
+  emergencyName   String?
+  emergencyPhone  String?
+  userId          String?      @unique
+  user            User?        @relation(fields: [userId], references: [id])
+  departmentId    String
+  department      Department   @relation(fields: [departmentId], references: [id])
+  equipmentLoans  EquipmentLoan[]
+  rosterEntries   RosterEntry[]
+  kpis            StaffKPI[]
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+}
+
+model Asset {
+  id                 String       @id @default(cuid())
+  assetCode          String       @unique
+  name               String
+  category           String
+  serialNumber       String?
+  purchaseDate       DateTime?
+  purchaseCost       Decimal?     @db.Decimal(14, 2)
+  location           String?
+  condition          String       @default("Good")
+  status             AssetStatus  @default(AVAILABLE)
+  notes              String?
+  loans              EquipmentLoan[]
+  maintenanceRecords Maintenance[]
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+}
+
+model EquipmentLoan {
+  id              String        @id @default(cuid())
+  assetId         String
+  asset           Asset         @relation(fields: [assetId], references: [id])
+  employeeId      String
+  employee        Employee      @relation(fields: [employeeId], references: [id])
+  activityName    String
+  location        String?
+  checkoutAt      DateTime
+  expectedReturn  DateTime
+  returnedAt      DateTime?
+  conditionOut    String?
+  conditionIn     String?
+  approvedBy      String?
+  createdAt       DateTime      @default(now())
+}
+
+model Programme {
+  id                String       @id @default(cuid())
+  title             String
+  description       String?
+  producer          String?
+  presenter         String?
+  durationMinutes   Int
+  sponsored         Boolean      @default(false)
+  sponsorName       String?
+  sponsorAgreement  Boolean      @default(false)
+  sponsorPaid       Boolean      @default(false)
+  requiredSpots     Int          @default(0)
+  status            RecordStatus @default(ACTIVE)
+  guests            Guest[]
+  scheduleItems     ScheduleItem[]
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+}
+
+model Guest {
+  id              String    @id @default(cuid())
+  programmeId     String
+  programme       Programme @relation(fields: [programmeId], references: [id])
+  fullName        String
+  roleOrTitle     String?
+  organisation    String?
+  phone           String?
+  email           String?
+  invitationStatus String  @default("PENDING")
+  consentReceived Boolean  @default(false)
+  notes           String?
+  createdAt       DateTime  @default(now())
+}
+
+model ScheduleItem {
+  id            String         @id @default(cuid())
+  programmeId   String?
+  programme     Programme?     @relation(fields: [programmeId], references: [id])
+  title         String
+  channel       String         @default("Satellite")
+  startAt       DateTime
+  endAt         DateTime
+  itemType      String         @default("PROGRAMME")
+  status        ScheduleStatus @default(PLANNED)
+  producer      String?
+  operator      String?
+  notes         String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  @@index([startAt, endAt, channel])
+}
+
+model OfficeRequest {
+  id            String        @id @default(cuid())
+  requestNumber String        @unique
+  requesterName String
+  department    String
+  requestType   String
+  title         String
+  description   String
+  amount        Decimal?      @db.Decimal(14, 2)
+  status        RequestStatus @default(SUBMITTED)
+  currentApprover String?
+  approvals     Approval[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Approval {
+  id              String        @id @default(cuid())
+  requestId       String
+  request         OfficeRequest @relation(fields: [requestId], references: [id])
+  approverName    String
+  approverRole    String
+  decision        String
+  comment         String?
+  decidedAt       DateTime      @default(now())
+}
+
+model FinanceEntry {
+  id             String      @id @default(cuid())
+  type           FinanceType
+  category       String
+  description    String
+  amount         Decimal     @db.Decimal(14, 2)
+  transactionAt  DateTime    @default(now())
+  reference      String?
+  department     String?
+  jobId          String?
+  approvedBy     String?
+  createdBy      String
+  receiptUrl     String?
+  createdAt      DateTime    @default(now())
+  @@index([transactionAt, type])
+}
+
+model MarketingJob {
+  id              String    @id @default(cuid())
+  jobNumber       String    @unique
+  clientName      String
+  description     String
+  marketerName    String
+  status          JobStatus @default(LEAD)
+  quotedAmount    Decimal   @db.Decimal(14, 2)
+  collectedAmount Decimal   @default(0) @db.Decimal(14, 2)
+  directCosts     Decimal   @default(0) @db.Decimal(14, 2)
+  commissionRate  Decimal   @default(10) @db.Decimal(5, 2)
+  commissionPaid  Boolean   @default(false)
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model StaffKPI {
+  id               String   @id @default(cuid())
+  employeeId       String
+  employee         Employee @relation(fields: [employeeId], references: [id])
+  year             Int
+  quarter          Int
+  targetSummary    String
+  score            Decimal  @db.Decimal(5, 2)
+  supervisor       String
+  evidence         String?
+  staffComment     String?
+  improvementPlan  String?
+  createdAt        DateTime @default(now())
+  @@unique([employeeId, year, quarter])
+}
+
+model RosterEntry {
+  id          String   @id @default(cuid())
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  shiftName   String
+  startsAt    DateTime
+  endsAt      DateTime
+  location    String?
+  assignment  String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  @@index([startsAt, endsAt])
+}
+
+model DepartmentReport {
+  id             String     @id @default(cuid())
+  departmentId   String
+  department     Department  @relation(fields: [departmentId], references: [id])
+  periodStart    DateTime
+  periodEnd      DateTime
+  submittedBy    String
+  activities     String
+  achievements   String?
+  challenges     String?
+  expenditure    Decimal?   @db.Decimal(14, 2)
+  nextPeriodPlan String?
+  status         RequestStatus @default(SUBMITTED)
+  createdAt      DateTime   @default(now())
+  @@index([periodStart, periodEnd])
+}
+
+model Maintenance {
+  id              String        @id @default(cuid())
+  assetId         String?
+  asset           Asset?        @relation(fields: [assetId], references: [id])
+  vehicleReg      String?
+  title           String
+  description     String
+  maintenanceType String
+  scheduledAt     DateTime?
+  completedAt     DateTime?
+  mileage         Int?
+  cost            Decimal?      @db.Decimal(14, 2)
+  vendor           String?
+  status           RequestStatus @default(SUBMITTED)
+  reportedBy       String
+  notes            String?
+  createdAt        DateTime      @default(now())
+}
+
+model NewsRequest {
+  id              String        @id @default(cuid())
+  requestNumber   String        @unique
+  requesterName   String
+  organisation    String?
+  phone           String?
+  email           String?
+  eventTitle      String
+  eventDate       DateTime
+  location        String
+  storyAngle      String?
+  deadline        DateTime?
+  requestedService String
+  status          RequestStatus @default(SUBMITTED)
+  assignedEditor  String?
+  assignedCrew    String?
+  estimatedFee    Decimal?      @db.Decimal(14, 2)
+  coverageNotes   String?
+  deliveryUrl     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actor       String
+  action      String
+  entityType  String
+  entityId    String?
+  details     Json?
+  createdAt   DateTime @default(now())
+  @@index([entityType, entityId, createdAt])
+}
